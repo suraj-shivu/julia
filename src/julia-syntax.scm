@@ -2430,12 +2430,20 @@
 (define (find-local-def-decls e) (find-decls 'local-def e))
 (define (find-global-decls e) (find-decls 'global e))
 
+(define (find-softscope e)
+  (expr-contains-p
+   (lambda (x) (and (pair? x) (eq? (car x) 'softscope) x))
+   e
+   (lambda (x) (not (and (pair? x)
+                         (memq (car x) '(lambda scope-block module toplevel)))))))
+
 (define (check-valid-name e)
   (or (valid-name? e)
       (error (string "invalid identifier name \"" e "\""))))
 
-(define (make-scope (lam #f) (args '()) (locals '()) (globals '()) (sp '()) (renames '()) (prev #f))
-  (vector lam args locals globals sp renames prev))
+(define (make-scope (lam #f) (args '()) (locals '()) (globals '()) (sp '()) (renames '()) (prev #f) (soft? #f)
+                    (implicit-globals '()))
+  (vector lam args locals globals sp renames prev soft? implicit-globals))
 (define (scope:lam s)     (aref s 0))
 (define (scope:args s)    (aref s 1))
 (define (scope:locals s)  (aref s 2))
@@ -2443,6 +2451,8 @@
 (define (scope:sp s)      (aref s 4))
 (define (scope:renames s) (aref s 5))
 (define (scope:prev s)    (aref s 6))
+(define (scope:soft? s)   (aref s 7))
+(define (scope:implicit-globals s) (aref s 8))
 
 (define (var-kind var scope)
   (if scope
@@ -2492,6 +2502,8 @@
          (if (not (in-scope? (cadr e) scope))
              (error "no outer local variable declaration exists for \"for outer\""))
          '(null))
+        ((eq? (car e) 'softscope)
+         '(null))
         ((eq? (car e) 'locals)
          (let* ((names (filter (lambda (v)
                                  (and (not (gensym? v))
@@ -2520,20 +2532,35 @@
          (let* ((blok            (cadr e)) ;; body of scope-block expression
                 (lam             (scope:lam scope))
                 (argnames        (lam:vars lam))
+                (toplevel?       (and (null? argnames) (eq? e (lam:body lam))))
                 (current-locals  (caddr lam)) ;; locals created so far in our lambda
                 (globals         (find-global-decls blok))
+                (assigned        (find-assigned-vars blok))
                 (locals-def      (find-local-def-decls blok))
                 (local-decls     (find-local-decls blok))
-                (toplevel?       (and (null? argnames) (eq? e (lam:body lam))))
+                (soft?           (and (null? argnames)
+                                      (let ((ss (find-softscope blok)))
+                                        (cond ((not ss) (scope:soft? scope))
+                                              ((equal? (cadr ss) '(true))  #t)
+                                              ((equal? (cadr ss) '(false)) #f)
+                                              (else (scope:soft? scope))))))
+                (implicit-globals (if (and toplevel? soft?)
+                                      (filter (lambda (v) (and (not (memq v locals-def))
+                                                               (not (memq v local-decls))))
+                                              assigned)
+                                      '()))
                 (implicit-locals
                  (filter (if toplevel?
                              ;; make only assigned gensyms implicitly local at top level
                              some-gensym?
                              (lambda (v) (and (memq (var-kind v scope) '(none static-parameter))
+                                              (not (and soft?
+                                                        (or (memq v (scope:implicit-globals scope))
+                                                            (defined-julia-global v))))
                                               (not (memq v locals-def))
                                               (not (memq v local-decls))
                                               (not (memq v globals)))))
-                         (find-assigned-vars blok)))
+                         assigned))
                 (locals-nondef   (delete-duplicates (append local-decls implicit-locals)))
                 (need-rename?    (lambda (vars)
                                    (filter (lambda (v) (or (memq v current-locals) (in-scope? v scope)))
@@ -2574,7 +2601,11 @@
                                           '()
                                           (append (map cons need-rename renamed)
                                                   (map cons need-rename-def renamed-def))
-                                          scope)))
+                                          scope
+                                          (and soft? (null? argnames))
+                                          (if toplevel?
+                                              implicit-globals
+                                              (scope:implicit-globals scope)))))
             (append! (map (lambda (v) `(local ,v)) newnames)
                      (map (lambda (v) `(local-def ,v)) newnames-def)))
            ))

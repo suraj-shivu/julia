@@ -29,6 +29,9 @@
            '(error "malformed expression"))))
    thk))
 
+;; this is overwritten when we run in actual julia
+(define (defined-julia-global v) #f)
+
 ;; parser entry points
 
 ;; parse one expression (if greedy) or atom, returning end position

@@ -131,6 +131,18 @@ static jl_value_t *scm_to_julia(fl_context_t *fl_ctx, value_t e, jl_module_t *mo
 static value_t julia_to_scm(fl_context_t *fl_ctx, jl_value_t *v);
 static jl_value_t *jl_expand_macros(jl_value_t *expr, jl_module_t *inmodule, struct macroctx_stack *macroctx, int onelevel);
 
+value_t fl_defined_julia_global(fl_context_t *fl_ctx, value_t *args, uint32_t nargs)
+{
+    // tells whether a var is defined in and *by* the current module
+    argcount(fl_ctx, "defined-julia-global", nargs, 1);
+    (void)tosymbol(fl_ctx, args[0], "defined-julia-global");
+    jl_ast_context_t *ctx = jl_ast_ctx(fl_ctx);
+    jl_sym_t *var = jl_symbol(symbol_name(fl_ctx, args[0]));
+    jl_binding_t *b =
+        (jl_binding_t*)ptrhash_get(&ctx->module->bindings, var);
+    return (b != HT_NOTFOUND && b->owner == ctx->module) ? fl_ctx->T : fl_ctx->F;
+}
+
 value_t fl_current_module_counter(fl_context_t *fl_ctx, value_t *args, uint32_t nargs)
 {
     jl_ast_context_t *ctx = jl_ast_ctx(fl_ctx);
@@ -197,6 +209,7 @@ value_t fl_julia_logmsg(fl_context_t *fl_ctx, value_t *args, uint32_t nargs)
 }
 
 static const builtinspec_t julia_flisp_ast_ext[] = {
+    { "defined-julia-global", fl_defined_julia_global },
     { "current-julia-module-counter", fl_current_module_counter },
     { "julia-scalar?", fl_julia_scalar },
     { "julia-logmsg", fl_julia_logmsg },
