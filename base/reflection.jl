@@ -1074,7 +1074,8 @@ function code_typed(@nospecialize(f), @nospecialize(types=Tuple);
                     optimize=true,
                     debuginfo::Symbol=:default,
                     world = get_world_counter(),
-                    params = Core.Compiler.Params(world))
+                    params = Core.Compiler.Params(world),
+                    interp = Core.Compiler.NativeInterpreter())
     ccall(:jl_is_in_pure_context, Bool, ()) && error("code reflection cannot be used from generated functions")
     if isa(f, Core.Builtin)
         throw(ArgumentError("argument is not a generic function"))
@@ -1091,7 +1092,7 @@ function code_typed(@nospecialize(f), @nospecialize(types=Tuple);
     asts = []
     for x in _methods(f, types, -1, world)
         meth = func_for_method_checked(x[3], types, x[2])
-        (code, ty) = Core.Compiler.typeinf_code(meth, x[1], x[2], optimize, params)
+        (code, ty) = Core.Compiler.typeinf_code(interp, meth, x[1], x[2], optimize, params)
         code === nothing && error("inference not successful") # inference disabled?
         debuginfo === :none && remove_linenums!(code)
         push!(asts, code => ty)
@@ -1100,6 +1101,10 @@ function code_typed(@nospecialize(f), @nospecialize(types=Tuple);
 end
 
 function return_types(@nospecialize(f), @nospecialize(types=Tuple))
+    return return_types(Core.Compiler.NativeInterpreter(), f, types)
+end
+
+function return_types(interp, @nospecialize(f), @nospecialize(types=Tuple))
     ccall(:jl_is_in_pure_context, Bool, ()) && error("code reflection cannot be used from generated functions")
     if isa(f, Core.Builtin)
         throw(ArgumentError("argument is not a generic function"))
@@ -1110,7 +1115,7 @@ function return_types(@nospecialize(f), @nospecialize(types=Tuple))
     params = Core.Compiler.Params(world)
     for x in _methods(f, types, -1, world)
         meth = func_for_method_checked(x[3], types, x[2])
-        ty = Core.Compiler.typeinf_type(meth, x[1], x[2], params)
+        ty = Core.Compiler.typeinf_type(interp, meth, x[1], x[2], params)
         ty === nothing && error("inference not successful") # inference disabled?
         push!(rt, ty)
     end

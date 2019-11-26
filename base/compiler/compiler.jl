@@ -92,6 +92,7 @@ using .Sort
 # compiler #
 ############
 
+include("compiler/types.jl")
 include("compiler/utilities.jl")
 include("compiler/validation.jl")
 

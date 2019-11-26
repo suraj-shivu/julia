@@ -1306,7 +1306,7 @@ function find_inferred(mi::MethodInstance, @nospecialize(atypes), sv::Optimizati
         end
     end
 
-    linfo = inf_for_methodinstance(mi, sv.params.world)
+    linfo = inf_for_methodinstance(Core.Compiler.NativeInterpreter(), mi, sv.params.world)
     if linfo isa CodeInstance
         if invoke_api(linfo) == 2
             # in this case function can be inlined to a constant
