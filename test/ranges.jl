@@ -1326,6 +1326,16 @@ using .Main.Furlongs
           Vector(Furlong(1):Furlong(0.5):Furlong(10)) == Furlong.(1:0.5:10)
 end
 
+@testset "sum arbitrary types" begin
+    @test sum(Furlong(1):Furlong(0.5):Furlong(10)) == Furlong{1,Float64}(104.5)
+    @test sum(StepRangeLen(Furlong(1), Furlong(0.5), 19)) == Furlong{1,Float64}(104.5)
+    @test sum(0f0:0.001f0:1f0) == 500.5
+    @test sum(0f0:0.000001f0:1f0) == 500000.5
+    @test sum(0f0:0.1f0:10f0) == 505.
+    @test sum(Float16(0):Float16(0.001):Float16(1)) ≈ 500.5
+    @test sum(Float16(0):Float16(0.1):Float16(10)) == 505.
+end
+
 @testset "issue #22270" begin
     linsp = range(1.0, stop=2.0, length=10)
     @test typeof(linsp.ref) == Base.TwicePrecision{Float64}
@@ -1559,4 +1569,10 @@ end
     @test_throws MethodError mod(3, UnitRange(1.0,5.0))
     @test_throws MethodError mod(3, 1:2:7)
     @test_throws DivideError mod(3, 1:0)
+end
+
+@testset "issue #33882" begin
+    r = StepRangeLen('a',2,4)
+    @test step(r) === 2
+    @test collect(r) == ['a','c','e','g']
 end

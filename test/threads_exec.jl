@@ -4,6 +4,29 @@ using Test
 using Base.Threads
 using Base.Threads: SpinLock
 
+# for cfunction_closure
+include("testenv.jl")
+
+function killjob(d)
+    Core.print(Core.stderr, d)
+    if Sys.islinux()
+        SIGINFO = 10
+    elseif Sys.isbsd()
+        SIGINFO = 29
+    end
+    if @isdefined(SIGINFO)
+        ccall(:uv_kill, Cint, (Cint, Cint), getpid(), SIGINFO)
+        sleep(1)
+    end
+    ccall(:uv_kill, Cint, (Cint, Cint), getpid(), Base.SIGTERM)
+    nothing
+end
+
+# set up a watchdog alarm for 20 minutes
+# so that we can attempt to get a "friendly" backtrace if something gets stuck
+# (expected test duration is about 18-180 seconds)
+Timer(t -> killjob("KILLING BY THREAD TEST WATCHDOG\n"), 1200)
+
 # threading constructs
 
 let a = zeros(Int, 2 * nthreads())
@@ -460,10 +483,12 @@ function test_thread_cfunction()
     end
     @test sum(ok) == 10000
 end
-if nthreads() == 1
-    test_thread_cfunction()
-else
-    @test_broken "cfunction trampoline code not thread-safe"
+if cfunction_closure
+    if nthreads() == 1
+        test_thread_cfunction()
+    else
+        @test_broken "cfunction trampoline code not thread-safe"
+    end
 end
 
 # Compare the two ways of checking if threading is enabled.
@@ -662,14 +687,11 @@ end
 
 
 # scheduling wake/sleep test (#32511)
-let timeout = 300 # this test should take about 1-10 seconds
-    t = Timer(timeout) do t
-        ccall(:uv_kill, Cint, (Cint, Cint), getpid(), Base.SIGTERM)
-    end # set up a watchdog alarm
+let t = Timer(t -> killjob("KILLING BY QUICK KILL WATCHDOG\n"), 600) # this test should take about 1-10 seconds
     for _ = 1:10^5
         @threads for idx in 1:1024; #=nothing=# end
     end
-    close(t) # stop the watchdog
+    close(t) # stop the fast watchdog
 end
 
 # issue #32575

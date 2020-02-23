@@ -1258,16 +1258,13 @@ function show_unquoted(io::IO, ex::Expr, indent::Int, prec::Int, quote_level::In
     elseif head === :tuple
         print(io, "(")
         if nargs > 0 && is_expr(args[1], :parameters)
-            if nargs == 1 && isempty(args[1].args)
-                # TODO: for now avoid printing (;)
-                show_unquoted_expr_fallback(io, args[1], indent, quote_level)
-                print(io, ',')
-            else
-                show_list(io, args[2:end], ", ", indent, 0, quote_level)
-                nargs == 2 && print(io, ',')
-                print(io, "; ")
-                show_list(io, args[1].args, ", ", indent, 0, quote_level, false, true)
+            show_list(io, args[2:end], ", ", indent, 0, quote_level)
+            nargs == 2 && print(io, ',')
+            print(io, ";")
+            if !isempty(args[1].args)
+                print(io, " ")
             end
+            show_list(io, args[1].args, ", ", indent, 0, quote_level, false, true)
         else
             show_list(io, args, ", ", indent, 0, quote_level)
             nargs == 1 && print(io, ',')
@@ -1314,7 +1311,7 @@ function show_unquoted(io::IO, ex::Expr, indent::Int, prec::Int, quote_level::In
         func_args = args[2:end]
 
         # :kw exprs are only parsed inside parenthesized calls
-        if any(a->is_expr(a, :kw), func_args)
+        if any(a->is_expr(a, :kw), func_args) || (!isempty(func_args) && is_expr(func_args[1], :parameters))
             show_call(io, head, func, func_args, indent, quote_level, true)
 
         # scalar multiplication (i.e. "100x")
@@ -1580,11 +1577,17 @@ function show_unquoted(io::IO, ex::Expr, indent::Int, prec::Int, quote_level::In
             print(io, '(')
             ind = indent + indent_width
             for i = 1:length(ex.args)
-                i > 1 && print(io, ";\n", ' '^ind)
+                if i > 1
+                    # if there was only a comment before the first semicolon, the expression would get parsed as a NamedTuple
+                    if !(i == 2 && ex.args[1] isa LineNumberNode)
+                        print(io, ';')
+                    end
+                    print(io, "\n", ' '^ind)
+                end
                 show_unquoted(io, ex.args[i], ind, -1, quote_level)
             end
             if length(ex.args) < 2
-                print(isempty(ex.args) ? "nothing;)" : ";)")
+                print(io, isempty(ex.args) ? ";;)" : ";)")
             else
                 print(io, ')')
             end
@@ -1645,7 +1648,7 @@ function show_unquoted(io::IO, ex::Expr, indent::Int, prec::Int, quote_level::In
         else
             print(io, head)
             a1 = args[1]
-            parens = (isa(a1,Expr) && (a1.head !== :tuple && a1.head !== :$)) ||
+            parens = (isa(a1,Expr) && !in(a1.head, (:tuple, :$, :vect, :braces))) ||
                      (isa(a1,Symbol) && isoperator(a1))
             parens && print(io, "(")
             show_unquoted(io, a1, 0, 0, quote_level)
@@ -2055,13 +2058,13 @@ alignment(io::IO, x::Number) = (length(sprint(show, x, context=io, sizehint=0)),
 alignment(io::IO, x::Integer) = (length(sprint(show, x, context=io, sizehint=0)), 0)
 "`alignment(4.23)` yields (1,3) for `4` and `.23`"
 function alignment(io::IO, x::Real)
-    m = match(r"^(.*?)((?:[\.eE].*)?)$", sprint(show, x, context=io, sizehint=0))
+    m = match(r"^(.*?)((?:[\.eEfF].*)?)$", sprint(show, x, context=io, sizehint=0))
     m === nothing ? (length(sprint(show, x, context=io, sizehint=0)), 0) :
                    (length(m.captures[1]), length(m.captures[2]))
 end
 "`alignment(1 + 10im)` yields (3,5) for `1 +` and `_10im` (plus sign on left, space on right)"
 function alignment(io::IO, x::Complex)
-    m = match(r"^(.*[^e][\+\-])(.*)$", sprint(show, x, context=io, sizehint=0))
+    m = match(r"^(.*[^ef][\+\-])(.*)$", sprint(show, x, context=io, sizehint=0))
     m === nothing ? (length(sprint(show, x, context=io, sizehint=0)), 0) :
                    (length(m.captures[1]), length(m.captures[2]))
 end

@@ -4,7 +4,7 @@
 module IteratorsMD
     import .Base: eltype, length, size, first, last, in, getindex,
                  setindex!, IndexStyle, min, max, zero, oneunit, isless, eachindex,
-                 ndims, IteratorSize, convert, show, iterate, promote_rule
+                 ndims, IteratorSize, convert, show, iterate, promote_rule, to_indices
 
     import .Base: +, -, *, (:)
     import .Base: simd_outer_range, simd_inner_length, simd_index
@@ -381,6 +381,10 @@ module IteratorsMD
     first(iter::CartesianIndices) = CartesianIndex(map(first, iter.indices))
     last(iter::CartesianIndices)  = CartesianIndex(map(last, iter.indices))
 
+    # When used as indices themselves, CartesianIndices can simply become its tuple of ranges
+    @inline to_indices(A, inds, I::Tuple{CartesianIndices, Vararg{Any}}) =
+        to_indices(A, inds, (I[1].indices..., tail(I)...))
+
     @inline function in(i::CartesianIndex{N}, r::CartesianIndices{N}) where {N}
         _in(true, i.I, first(r).I, last(r).I)
     end
@@ -573,6 +577,7 @@ function checkindex(::Type{Bool}, inds::Tuple, I::AbstractArray{<:CartesianIndex
     end
     b
 end
+checkindex(::Type{Bool}, inds::Tuple, I::CartesianIndices) = all(checkindex.(Bool, inds, I.indices))
 
 # combined count of all indices, including CartesianIndex and
 # AbstractArray{CartesianIndex}
@@ -956,12 +961,23 @@ julia> y
 copyto!(dest, src)
 
 function copyto!(dest::AbstractArray{T1,N}, src::AbstractArray{T2,N}) where {T1,T2,N}
-    checkbounds(dest, axes(src)...)
     src′ = unalias(dest, src)
-    for I in eachindex(IndexStyle(src′,dest), src′)
-        @inbounds dest[I] = src′[I]
+    # fastpath for equal axes (#34025)
+    if axes(dest) == axes(src)
+        for I in eachindex(IndexStyle(src′,dest), src′)
+            @inbounds dest[I] = src′[I]
+        end
+    # otherwise enforce linear indexing
+    else
+        isrc = eachindex(IndexLinear(), src)
+        idest = eachindex(IndexLinear(), dest)
+        ΔI = first(idest) - first(isrc)
+        checkbounds(dest, last(isrc) + ΔI)
+        for I in isrc
+            @inbounds dest[I + ΔI] = src′[I]
+        end
     end
-    dest
+    return dest
 end
 
 function copyto!(dest::AbstractArray{T1,N}, Rdest::CartesianIndices{N},

@@ -66,12 +66,41 @@ mutable struct REPLBackend
     response_channel::Channel
     "flag indicating the state of this backend"
     in_eval::Bool
+    "transformation functions to apply before evaluating expressions"
+    ast_transforms::Vector{Any}
     "current backend task"
     backend_task::Task
 
-    REPLBackend(repl_channel, response_channel, in_eval) =
-        new(repl_channel, response_channel, in_eval)
+    REPLBackend(repl_channel, response_channel, in_eval, ast_transforms=copy(repl_ast_transforms)) =
+        new(repl_channel, response_channel, in_eval, ast_transforms)
 end
+
+"""
+    softscope(ex)
+
+Return a modified version of the parsed expression `ex` that uses
+the REPL's "soft" scoping rules for global syntax blocks.
+"""
+function softscope(@nospecialize ex)
+    if ex isa Expr
+        h = ex.head
+        if h === :toplevel
+            ex′ = Expr(h)
+            map!(softscope, resize!(ex′.args, length(ex.args)), ex.args)
+            return ex′
+        elseif h in (:meta, :import, :using, :export, :module, :error, :incomplete, :thunk)
+            return ex
+        else
+            return Expr(:block, Expr(:softscope, true), ex)
+        end
+    end
+    return ex
+end
+
+# Temporary alias until Documenter updates
+const softscope! = softscope
+
+const repl_ast_transforms = Any[softscope] # defaults for new REPL backends
 
 function eval_user_input(@nospecialize(ast), backend::REPLBackend)
     lasterr = nothing
@@ -83,6 +112,9 @@ function eval_user_input(@nospecialize(ast), backend::REPLBackend)
                 put!(backend.response_channel, (lasterr,true))
             else
                 backend.in_eval = true
+                for xf in backend.ast_transforms
+                    ast = Base.invokelatest(xf, ast)
+                end
                 value = Core.eval(Main, ast)
                 backend.in_eval = false
                 # note: use jl_set_global to make sure value isn't passed through `expand`

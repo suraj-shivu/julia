@@ -87,7 +87,9 @@
                    (string #\( (deparse (caddr e)) " " (cadr e) " " (deparse (cadddr e)) #\) ))
                   (else
                    (deparse-prefix-call (cadr e) (cddr e) #\( #\)))))
-           (($ &)          (if (and (pair? (cadr e)) (not (memq (caadr e) '(outerref null true false))))
+           (($ &)          (if (and (pair? (cadr e))
+                                    (not (memq (caadr e)
+                                               '(outerref null true false tuple $ vect braces))))
                                (string (car e) "(" (deparse (cadr e)) ")")
                                (string (car e) (deparse (cadr e)))))
            ((|::|)         (if (length= e 2)
@@ -273,7 +275,8 @@
 
 ;; predicates and accessors
 
-(define (quoted? e) (memq (car e) '(quote top core globalref outerref line break inert meta)))
+(define (quoted? e)
+  (memq (car e) '(quote top core globalref outerref line break inert meta inbounds loopinfo)))
 (define (quotify e) `',e)
 (define (unquote e)
   (if (and (pair? e) (memq (car e) '(quote inert)))

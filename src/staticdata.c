@@ -41,9 +41,9 @@ static void *const _tags[] = {
          &jl_linenumbernode_type, &jl_lineinfonode_type,
          &jl_gotonode_type, &jl_quotenode_type,
          &jl_pinode_type, &jl_phinode_type, &jl_phicnode_type, &jl_upsilonnode_type,
-         &jl_type_type, &jl_bottom_type, &jl_ref_type, &jl_pointer_type,
+         &jl_type_type, &jl_bottom_type, &jl_ref_type, &jl_pointer_type, &jl_addrspace_pointer_type,
          &jl_vararg_type, &jl_abstractarray_type,
-         &jl_densearray_type, &jl_void_type, &jl_function_type, &jl_typeofbottom_type,
+         &jl_densearray_type, &jl_nothing_type, &jl_function_type, &jl_typeofbottom_type,
          &jl_unionall_type, &jl_typename_type, &jl_builtin_type, &jl_code_info_type,
          &jl_task_type, &jl_uniontype_type, &jl_typetype_type, &jl_abstractstring_type,
          &jl_array_any_type, &jl_intrinsic_type, &jl_abstractslot_type,
@@ -57,7 +57,7 @@ static void *const _tags[] = {
          &jl_float16_type, &jl_float32_type, &jl_float64_type, &jl_floatingpoint_type,
          &jl_number_type, &jl_signed_type,
          // special typenames
-         &jl_tuple_typename, &jl_pointer_typename, &jl_array_typename, &jl_type_typename,
+         &jl_tuple_typename, &jl_pointer_typename, &jl_addrspace_pointer_typename, &jl_array_typename, &jl_type_typename,
          &jl_vararg_typename, &jl_namedtuple_typename,
          &jl_vecelement_typename,
          // special exceptions
@@ -871,7 +871,9 @@ static void jl_write_values(jl_serializer_state *s)
                     size_t np = dt->layout->npointers;
                     size_t fieldsize = jl_fielddesc_size(dt->layout->fielddesc_type);
                     char *flddesc = (char*)dt->layout;
-                    size_t fldsize = sizeof(jl_datatype_layout_t) + nf * fieldsize + (np << dt->layout->fielddesc_type);
+                    size_t fldsize = sizeof(jl_datatype_layout_t) + nf * fieldsize;
+                    if (dt->layout->first_ptr != -1)
+                        fldsize += np << dt->layout->fielddesc_type;
                     uintptr_t layout = LLT_ALIGN(ios_pos(s->const_data), sizeof(void*));
                     write_padding(s->const_data, layout - ios_pos(s->const_data)); // realign stream
                     newdt->layout = NULL; // relocation offset

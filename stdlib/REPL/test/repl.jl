@@ -1027,9 +1027,11 @@ for (line, expr) in Pair[
     "while       " => :while, # keyword, trailing spaces should be stripped.
     "0"            => 0,
     "\"...\""      => "...",
-    "r\"...\""     => Expr(:macrocall, Symbol("@r_str"), LineNumberNode(1, :none), "...")
+    "r\"...\""     => Expr(:macrocall, Symbol("@r_str"), LineNumberNode(1, :none), "..."),
+    "using Foo"    => :using,
+    "import Foo"   => :import,
     ]
-    #@test REPL._helpmode(line) == Expr(:macrocall, Expr(:., Expr(:., :Base, QuoteNode(:Docs)), QuoteNode(Symbol("@repl"))), LineNumberNode(119, doc_util_path), stdout, expr)
+    @test REPL._helpmode(line).args[4] == expr
     buf = IOBuffer()
     @test Base.eval(REPL._helpmode(buf, line)) isa Union{Markdown.MD,Nothing}
 end
@@ -1039,6 +1041,49 @@ for line in ["′", "abstract", "type", "|=", ".="]
     @test occursin("No documentation found.",
         sprint(show, Base.eval(REPL._helpmode(IOBuffer(), line))::Union{Markdown.MD,Nothing}))
 end
+
+# Issue #25930
+
+# Brief and extended docs (issue #25930)
+let text =
+        """
+            brief_extended()
+
+        Short docs
+
+        # Extended help
+
+        Long docs
+        """,
+    md = Markdown.parse(text)
+    @test md == REPL.trimdocs(md, false)
+    @test !isa(md.content[end], REPL.Message)
+    mdbrief = REPL.trimdocs(md, true)
+    @test length(mdbrief.content) == 3
+    @test isa(mdbrief.content[1], Markdown.Code)
+    @test isa(mdbrief.content[2], Markdown.Paragraph)
+    @test isa(mdbrief.content[3], REPL.Message)
+    @test occursin("??", mdbrief.content[3].msg)
+end
+
+module BriefExtended
+"""
+    f()
+
+Short docs
+
+# Extended help
+
+Long docs
+"""
+f() = nothing
+end # module BriefExtended
+buf = IOBuffer()
+md = Base.eval(REPL._helpmode(buf, "$(@__MODULE__).BriefExtended.f"))
+@test length(md.content) == 2 && isa(md.content[2], REPL.Message)
+buf = IOBuffer()
+md = Base.eval(REPL._helpmode(buf, "?$(@__MODULE__).BriefExtended.f"))
+@test length(md.content) == 1 && length(md.content[1].content[1].content) == 4
 
 # PR #27562
 fake_repl() do stdin_write, stdout_read, repl
@@ -1090,3 +1135,18 @@ fake_repl() do stdin_write, stdout_read, repl
     write(stdin_write, "\x15\x04")
     Base.wait(repltask)
 end
+
+# AST transformations (softscope, Revise, OhMyREPL, etc.)
+repl_channel = Channel(1)
+response_channel = Channel(1)
+backend = REPL.start_repl_backend(repl_channel, response_channel)
+put!(repl_channel, (:(1+1), false))
+reply = take!(response_channel)
+@test reply == (2, false)
+twice(ex) = Expr(:tuple, ex, ex)
+push!(backend.ast_transforms, twice)
+put!(repl_channel, (:(1+1), false))
+reply = take!(response_channel)
+@test reply == ((2, 2), false)
+put!(repl_channel, (nothing, -1))
+Base.wait(backend.backend_task)

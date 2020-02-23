@@ -26,7 +26,7 @@
 (define prec-colon       (append! '(: |..|) (add-dots '(… ⁝ ⋮ ⋱ ⋰ ⋯))))
 (define prec-plus        (append! '($)
                           (add-dots '(+ - |\|| ⊕ ⊖ ⊞ ⊟ |++| ∪ ∨ ⊔ ± ∓ ∔ ∸ ≏ ⊎ ⊻ ⊽ ⋎ ⋓ ⧺ ⧻ ⨈ ⨢ ⨣ ⨤ ⨥ ⨦ ⨧ ⨨ ⨩ ⨪ ⨫ ⨬ ⨭ ⨮ ⨹ ⨺ ⩁ ⩂ ⩅ ⩊ ⩌ ⩏ ⩐ ⩒ ⩔ ⩖ ⩗ ⩛ ⩝ ⩡ ⩢ ⩣))))
-(define prec-times       (add-dots '(* / ÷ % & ⋅ ∘ × |\\| ∩ ∧ ⊗ ⊘ ⊙ ⊚ ⊛ ⊠ ⊡ ⊓ ∗ ∙ ∤ ⅋ ≀ ⊼ ⋄ ⋆ ⋇ ⋉ ⋊ ⋋ ⋌ ⋏ ⋒ ⟑ ⦸ ⦼ ⦾ ⦿ ⧶ ⧷ ⨇ ⨰ ⨱ ⨲ ⨳ ⨴ ⨵ ⨶ ⨷ ⨸ ⨻ ⨼ ⨽ ⩀ ⩃ ⩄ ⩋ ⩍ ⩎ ⩑ ⩓ ⩕ ⩘ ⩚ ⩜ ⩞ ⩟ ⩠ ⫛ ⊍ ▷ ⨝ ⟕ ⟖ ⟗)))
+(define prec-times       (add-dots '(* / ÷ % & ⋅ ∘ × |\\| ∩ ∧ ⊗ ⊘ ⊙ ⊚ ⊛ ⊠ ⊡ ⊓ ∗ ∙ ∤ ⅋ ≀ ⊼ ⋄ ⋆ ⋇ ⋉ ⋊ ⋋ ⋌ ⋏ ⋒ ⟑ ⦸ ⦼ ⦾ ⦿ ⧶ ⧷ ⨇ ⨰ ⨱ ⨲ ⨳ ⨴ ⨵ ⨶ ⨷ ⨸ ⨻ ⨼ ⨽ ⩀ ⩃ ⩄ ⩋ ⩍ ⩎ ⩑ ⩓ ⩕ ⩘ ⩚ ⩜ ⩞ ⩟ ⩠ ⫛ ⊍ ▷ ⨝ ⟕ ⟖ ⟗ ⨟)))
 (define prec-rational    (add-dots '(//)))
 (define prec-bitshift    (add-dots '(<< >> >>>)))
 ;; `where`
@@ -234,7 +234,7 @@
 
 (define (read-operator port c)
   (if (and (eqv? c #\*) (eqv? (peek-char port) #\*))
-      (error "use \"^\" instead of \"**\""))
+      (error "use \"x^y\" instead of \"x**y\" for exponentiation, and \"x...\" instead of \"**x\" for splatting."))
   (if (or (eof-object? (peek-char port)) (not (op-or-sufchar? (peek-char port))))
       (symbol (string c)) ; 1-char operator
       (let ((str (let loop ((str (string c))
@@ -1241,7 +1241,10 @@
             ((#\{ )
              (disallow-space s ex t)
              (take-token s)
-             (loop (list* 'curly ex (parse-call-arglist s #\} ))))
+             (let ((args (parse-call-arglist s #\} )))
+               (if macrocall?
+                   `(call ,ex (braces ,@args))
+                   (loop (list* 'curly ex args)))))
             ((#\" #\`)
              (if (and (or (symbol? ex) (valid-modref? ex))
                       (not (operator? ex))
@@ -1918,9 +1921,7 @@
                               (and (null? first) (null? blk)
                                    ;; all semicolons inside ()
                                    (if (length= (car args) 1)
-                                       (begin (parser-depwarn s "(;)" "begin end")
-                                              ;; should eventually be (tuple (parameters))
-                                              `(block))
+                                       `(tuple (parameters))
                                        `(block)))))))
           (and (null? first) (null? args) (not comma?)
                (error "unreachable"))
@@ -2264,9 +2265,12 @@
                                                   b))
                                   (loop (read-char (ts:port s))))))
                      (let ((str (tostr #f b)))
-                       (if (= (string-length str) 1)
-                           (string.char str 0)
-                           (error "invalid character literal")))))))
+                       (let ((len (string-length str)))
+                         (if (= len 1)
+                             (string.char str 0)
+                             (if (= len 0)
+                                 (error "invalid empty character literal")
+                                 (error "character literal contains multiple characters")))))))))
 
           ;; symbol/expression quote
           ((eq? t ':)

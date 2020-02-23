@@ -91,7 +91,7 @@ julia-debug julia-release : julia-% : julia-sysimg-% julia-symlink julia-libccal
 debug release : % : julia-%
 
 docs: julia-sysimg-$(JULIA_BUILD_MODE)
-	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/doc JULIA_EXECUTABLE='$(call spawn,$(JULIA_EXECUTABLE_$(JULIA_BUILD_MODE)))'
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/doc JULIA_EXECUTABLE='$(call spawn,$(JULIA_EXECUTABLE_$(JULIA_BUILD_MODE))) --startup-file=no'
 
 check-whitespace:
 ifneq ($(NO_GIT), 1)
@@ -123,16 +123,15 @@ release-candidate: release testall
 	@echo 2. Update references to the julia version in the source directories, such as in README.md
 	@echo 3. Bump VERSION
 	@echo 4. Increase SOMAJOR and SOMINOR if needed.
-	@echo 5. Update versions in deploydocs (at the end of doc/make.jl) if needed.
-	@echo 6. Create tag, push to github "\(git tag v\`cat VERSION\` && git push --tags\)"		#"` # These comments deal with incompetent syntax highlighting rules
-	@echo 7. Clean out old .tar.gz files living in deps/, "\`git clean -fdx\`" seems to work	#"`
-	@echo 8. Replace github release tarball with tarballs created from make light-source-dist and make full-source-dist
-	@echo 9. Check that 'make && make install && make test' succeed with unpacked tarballs even without Internet access.
-	@echo 10. Follow packaging instructions in DISTRIBUTING.md to create binary packages for all platforms
-	@echo 11. Upload to AWS, update https://julialang.org/downloads and http://status.julialang.org/stable links
-	@echo 12. Update checksums on AWS for tarball and packaged binaries
-	@echo 13. Announce on mailing lists
-	@echo 14. Change master to release-0.X in base/version.jl and base/version_git.sh as in 4cb1e20
+	@echo 5. Create tag, push to github "\(git tag v\`cat VERSION\` && git push --tags\)"		#"` # These comments deal with incompetent syntax highlighting rules
+	@echo 6. Clean out old .tar.gz files living in deps/, "\`git clean -fdx\`" seems to work	#"`
+	@echo 7. Replace github release tarball with tarballs created from make light-source-dist and make full-source-dist
+	@echo 8. Check that 'make && make install && make test' succeed with unpacked tarballs even without Internet access.
+	@echo 9. Follow packaging instructions in DISTRIBUTING.md to create binary packages for all platforms
+	@echo 10. Upload to AWS, update https://julialang.org/downloads and http://status.julialang.org/stable links
+	@echo 11. Update checksums on AWS for tarball and packaged binaries
+	@echo 12. Announce on mailing lists
+	@echo 13. Change master to release-0.X in base/version.jl and base/version_git.sh as in 4cb1e20
 	@echo
 
 $(build_man1dir)/julia.1: $(JULIAHOME)/doc/man/julia.1 | $(build_man1dir)
@@ -180,7 +179,7 @@ else
 JL_PRIVATE_LIBS-$(USE_SYSTEM_ZLIB) += libz
 endif
 ifeq ($(USE_LLVM_SHLIB),1)
-JL_PRIVATE_LIBS-$(USE_SYSTEM_LLVM) += libLLVM libLLVM-8
+JL_PRIVATE_LIBS-$(USE_SYSTEM_LLVM) += libLLVM libLLVM-9
 endif
 
 ifeq ($(USE_SYSTEM_LIBM),0)
@@ -571,8 +570,6 @@ distcleanall: cleanall
 
 test: check-whitespace $(JULIA_BUILD_MODE)
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/test default JULIA_BUILD_MODE=$(JULIA_BUILD_MODE)
-
-JULIA_SYSIMG=$(build_private_libdir)/sys$(JULIA_LIBSUFFIX).$(SHLIB_EXT)
 
 testall: check-whitespace $(JULIA_BUILD_MODE)
 	cp $(JULIA_SYSIMG) $(BUILDROOT)/local.$(SHLIB_EXT)

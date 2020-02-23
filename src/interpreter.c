@@ -543,7 +543,7 @@ static jl_value_t *eval_value(jl_value_t *e, interpreter_state *s)
     else if (head == boundscheck_sym) {
         return jl_true;
     }
-    else if (head == meta_sym || head == inbounds_sym || head == loopinfo_sym) {
+    else if (head == meta_sym || head == coverageeffect_sym || head == inbounds_sym || head == loopinfo_sym) {
         return jl_nothing;
     }
     else if (head == gc_preserve_begin_sym || head == gc_preserve_end_sym) {
@@ -783,6 +783,10 @@ static jl_value_t *eval_body(jl_array_t *stmts, interpreter_state *s, size_t ip,
                 }
                 else if (head == structtype_sym) {
                     eval_structtype((jl_expr_t*)stmt, s);
+                }
+                else if (head == toplevel_sym) {
+                    jl_value_t *res = jl_toplevel_eval(s->module, stmt);
+                    s->locals[jl_source_nslots(s->src) + s->ip] = res;
                 }
                 else if (jl_is_toplevel_only_expr(stmt)) {
                     jl_toplevel_eval(s->module, stmt);

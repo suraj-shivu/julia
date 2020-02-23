@@ -220,6 +220,8 @@ export
     atanh,
     big,
     binomial,
+    bitreverse,
+    bitrotate,
     bswap,
     cbrt,
     ceil,
@@ -502,6 +504,7 @@ export
     in,
     intersect!,
     intersect,
+    isdisjoint,
     isempty,
     issubset,
     issetequal,
@@ -514,7 +517,9 @@ export
     mapfoldr,
     mapreduce,
     merge!,
+    mergewith!,
     merge,
+    mergewith,
     pairs,
     reduce,
     setdiff!,
@@ -638,7 +643,7 @@ export
     identity,
     isbits,
     isequal,
-    isimmutable,
+    ismutable,
     isless,
     ifelse,
     objectid,
@@ -939,6 +944,7 @@ export
     @s_str,    # regex substitution string
     @v_str,    # version number
     @raw_str,  # raw string with no interpolation/unescaping
+    @NamedTuple,
 
     # documentation
     @text_str,
